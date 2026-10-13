@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.py[cod]
+.env
+data/
+chroma_data/
+uploads/
+.idea/
+.vscode/
+*.log

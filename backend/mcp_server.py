@@ -1,9 +1,4 @@
-"""Private Streamable HTTP MCP service. Start with `python -m backend.mcp_server`.
-
-Every tool requires an HMAC-signed identity issued by the API process. The LLM
-never receives or chooses a user id; the API binds the signed context to the
-authenticated request before the MCP call.
-"""
+"""独立运行的 MCP 工具服务，通过 HMAC 签名身份限制数据访问权限。"""
 from __future__ import annotations
 
 import hashlib
@@ -16,17 +11,32 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import select
 
-from backend.main import Course, Enrollment, Plan, SessionLocal, Task, User, course_json, search_materials
+from backend.core.shared import Course, Enrollment, Plan, SessionLocal, Task, User, course_json
+from backend.services.rag import search_materials
 
 load_dotenv()
-mcp = FastMCP("campus-course-tools", host=os.getenv("MCP_HOST", "127.0.0.1"), port=int(os.getenv("MCP_PORT", "8001")))
+mcp = FastMCP(
+    "campus-course-tools",
+    host=os.getenv("MCP_HOST", "127.0.0.1"),
+    port=int(os.getenv("MCP_PORT", "8001")),
+)
 
 
 def verified_user(context: str) -> int:
+    """验证 API 签发的用户身份签名，避免工具接受伪造身份。"""
     try:
         user_text, signature = context.split(".", 1)
-        expected = hmac.new(os.getenv("SECRET_KEY", "development-only-change-this-secret").encode(), user_text.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(signature, expected): raise ValueError("signature")
+        secret = os.getenv(
+            "SECRET_KEY",
+            "development-only-change-this-secret",
+        )
+        expected = hmac.new(
+            secret.encode(),
+            user_text.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            raise ValueError("signature")
         return int(user_text)
     except Exception as exc:
         raise ValueError("未授权的用户上下文") from exc
@@ -34,15 +44,22 @@ def verified_user(context: str) -> int:
 
 @mcp.tool()
 async def get_my_schedule(auth_context: str) -> str:
+    """查询当前学生本人已选课程的课表。"""
     """查询当前登录学生本人有权限访问的课表。"""
     user_id = verified_user(auth_context)
     with SessionLocal() as db:
-        rows = db.scalars(select(Course).join(Enrollment).where(Enrollment.user_id == user_id).order_by(Course.weekday, Course.start_time)).all()
+        rows = db.scalars(
+            select(Course)
+            .join(Enrollment)
+            .where(Enrollment.user_id == user_id)
+            .order_by(Course.weekday, Course.start_time)
+        ).all()
         return json.dumps([course_json(row) for row in rows], ensure_ascii=False)
 
 
 @mcp.tool()
 async def search_course_materials(auth_context: str, query: str) -> str:
+    """在当前学生有权限的资料库中检索相关片段。"""
     """在当前学生已选课程的 RAG 知识库中检索资料片段。"""
     user_id = verified_user(auth_context)
     with SessionLocal() as db:
@@ -54,6 +71,7 @@ async def search_course_materials(auth_context: str, query: str) -> str:
 
 @mcp.tool()
 async def save_study_plan(auth_context: str, title: str, content: str, due_date: str = "") -> str:
+    """把学习计划保存到当前学生的账户下。"""
     """将学习计划保存到当前登录学生的个人计划。"""
     user_id = verified_user(auth_context)
     parsed = date.fromisoformat(due_date) if due_date else None

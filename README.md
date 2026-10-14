@@ -11,6 +11,23 @@ Vue 3 + FastAPI 全栈校园课程助手。学生登录后可查看本人课表�
 - RAG：SiliconFlow `BAAI/bge-m3` Embedding + Chroma 持久向量库
 - 开发环境数据库：SQLite；配置 `DATABASE_URL` 后可使用 MySQL 8
 
+## 后端目录结构
+
+后端按职责拆分，`backend/main.py` 仅负责创建 FastAPI 应用和挂载路由：
+
+```text
+backend/
+├── main.py                 # 应用入口与路由注册
+├── core/                   # 配置、数据库会话、认证依赖与共享函数
+├── models/                 # SQLAlchemy 数据库实体
+├── schemas/                # API 请求参数校验
+├── api/routers/            # 登录、课程、资料、管理和对话接口
+├── services/               # RAG、Agent 和启动索引服务
+└── mcp_server.py           # 独立 MCP 工具服务
+```
+
+后端模块中的模型、接口和服务函数均配有中文说明；`uvicorn backend.main:app` 的启动命令保持不变。
+
 ## 环境
 
 - Node.js LTS

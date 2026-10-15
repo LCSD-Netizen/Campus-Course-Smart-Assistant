@@ -2023,6 +2023,22 @@ body {
 .chat-title small {
   font-size:10px
 }
+.clear-chat-button {
+  display:flex;
+  align-items:center;
+  gap:5px;
+  margin-left:10px;
+  padding:6px 8px;
+  border:1px solid #e7eaee;
+  border-radius:7px;
+  background:#fff;
+  color:#687482;
+  font-size:11px;
+}
+.clear-chat-button:hover {
+  border-color:#c5ccef;
+  color:#536ed9;
+}
 .bubble {
   font-size:13px;
   line-height:1.9

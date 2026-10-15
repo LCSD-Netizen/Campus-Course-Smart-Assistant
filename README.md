@@ -94,4 +94,6 @@ DATABASE_URL=mysql+pymysql://用户名:密码@localhost:3306/campus_course?chars
 
 `POST /api/chat/stream` 接收 Bearer JWT，并返回 `text/event-stream`。前端显示思考阶段、MCP 工具调用和增量回答。Agent 仅获得不带用户 ID 参数的工具定义；FastAPI 根据登录用户附加 HMAC 签名身份，再访问本机 MCP 服务。MCP 工具验证签名，并在课表、资料检索和学习计划查询中再次按用户身份过滤。没有模型密钥时，系统使用本地规则与示例课程资料提供开发演示响应。
 
+课程问答会将当前浏览器会话最近最多 12 条已完成消息（约 6 轮）作为短期上下文传给 Agent，帮助理解追问和上下文指代。点击聊天标题处的“清空对话”或刷新页面会清除这段记忆；对话记忆不会保存到数据库。后端只接受 `user` 和 `assistant` 两种历史角色，并限制条数与单条长度。
+
 管理员上传的 PDF、DOCX、PPTX、TXT 会提取文本并分块；配置 Embedding 后写入 Chroma，学生只能检索共享资料或本人已选课程对应的资料。当前演示课程用于首次初始化，后续正式项目可按教务数据扩展课程与选课导入。

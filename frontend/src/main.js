@@ -25,6 +25,7 @@ import 'element-plus/theme-chalk/el-tag.css'
 // 加载本项目界面的全局样式。
 import './styles/main.css'
 import App from './App.vue'
+import router from './router'
 
 // 创建 Vue 应用并注册页面中使用的 Element Plus 控件。
 const app = createApp(App)
@@ -44,4 +45,5 @@ for (const component of elementComponents) {
   app.component(component.name, component)
 }
 
+app.use(router)
 app.mount('#app')

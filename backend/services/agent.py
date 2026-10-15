@@ -25,8 +25,13 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, rela
 from backend.core.shared import *
 from backend.services.rag import search_materials
 
-async def run_agent(message: str, user: User, db: Session) -> AsyncIterator[str]:
-    """处理run_agent相关业务逻辑。"""
+async def run_agent(
+    message: str,
+    user: User,
+    db: Session,
+    history: list[dict[str, str]] | None = None,
+) -> AsyncIterator[str]:
+    """结合最近的对话上下文运行校园助手 Agent。"""
     yield event('status', {'stage': 'thinking', 'message': '正在理解你的问题'})
     llm_key = os.getenv('OPENAI_API_KEY')
     if not llm_key:
@@ -35,7 +40,7 @@ async def run_agent(message: str, user: User, db: Session) -> AsyncIterator[str]
         return
     try:
         from langchain.agents import create_agent
-        from langchain_core.messages import HumanMessage
+        from langchain_core.messages import AIMessage, HumanMessage
         from langchain_core.tools import tool
         from langchain_openai import ChatOpenAI
 
@@ -68,10 +73,30 @@ async def run_agent(message: str, user: User, db: Session) -> AsyncIterator[str]
             return json.dumps({'id': row.id, 'title': title, 'saved': True}, ensure_ascii=False)
         tools = [get_my_schedule, search_course_materials, save_study_plan]
         llm = ChatOpenAI(model=os.getenv('OPENAI_MODEL', 'deepseek-chat'), api_key=llm_key, base_url=os.getenv('OPENAI_BASE_URL', 'https://api.deepseek.com/v1'), temperature=0.2, streaming=True)
-        agent = create_agent(model=llm, tools=tools, system_prompt=f'你是校园课程智能助手。只回答当前用户有权限访问的信息。用户称呼：{user.display_name}。需要查课表时调用 get_my_schedule；依据课程资料回答时调用 search_course_materials；用户要求制定并保存计划时先生成计划并调用 save_study_plan。没有资料依据时明确说明。使用简体中文。')
+        agent = create_agent(
+            model=llm,
+            tools=tools,
+            system_prompt=(
+                f'你是校园课程智能助手。只回答当前用户有权限访问的信息。'
+                f'用户称呼：{user.display_name}。参考近期对话理解省略和指代；'
+                '如用户更正了先前信息，以最新说法为准。需要查课表时调用 '
+                'get_my_schedule；依据课程资料回答时调用 search_course_materials；'
+                '用户要求制定并保存计划时先生成计划并调用 save_study_plan。'
+                '没有资料依据时明确说明。使用简体中文。'
+            ),
+        )
         answer = ''
         labels = {'get_my_schedule': '查询你的课表', 'search_course_materials': '检索课程资料', 'save_study_plan': '保存学习计划'}
-        async for item in agent.astream_events({'messages': [HumanMessage(content=message)]}, config={'recursion_limit': 12}, version='v2'):
+        # 只将最近几轮普通对话加入上下文，不把工具执行日志塞回对话。
+        conversation = []
+        for item in (history or [])[-12:]:
+            if item['role'] == 'user':
+                conversation.append(HumanMessage(content=item['content']))
+            else:
+                conversation.append(AIMessage(content=item['content']))
+        conversation.append(HumanMessage(content=message))
+
+        async for item in agent.astream_events({'messages': conversation}, config={'recursion_limit': 12}, version='v2'):
             kind = item.get('event')
             name = item.get('name', '')
             data = item.get('data', {})

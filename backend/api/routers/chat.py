@@ -34,6 +34,15 @@ async def chat_stream(body: ChatBody, user: User=Depends(get_user)):
 
     async def stream():
         with SessionLocal() as db:
-            async for item in run_agent(body.message, user, db):
+            conversation_history = [
+                item.model_dump()
+                for item in body.history
+            ]
+            async for item in run_agent(
+                body.message,
+                user,
+                db,
+                conversation_history,
+            ):
                 yield item
     return StreamingResponse(stream(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
